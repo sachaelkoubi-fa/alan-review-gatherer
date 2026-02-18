@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import io
 import logging
-import os
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
