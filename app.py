@@ -2,8 +2,8 @@
 Alan Review Gatherer – Streamlit Web App
 =========================================
 Collects Alan reviews from Google Reviews, Trustpilot, Opinion Assurances,
-App Store & Play Store within a user-specified date range, and exports them
-as a unified CSV file.
+App Store & Play Store within a user-specified date range, exports them
+as a unified CSV file, and generates AI-powered analysis reports.
 
 Run with:
     streamlit run app.py
@@ -11,14 +11,16 @@ Run with:
 
 from __future__ import annotations
 
+import calendar
 import io
 import logging
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
@@ -47,6 +49,16 @@ from scrapers.trustpilot_reviews import scrape_trustpilot
 from scrapers.opinion_assurances_reviews import scrape_opinion_assurances
 from scrapers.google_reviews import scrape_google_reviews
 from scrapers.appstore_reviews import scrape_app_store_reviews
+from generate_report import (
+    compute_metrics,
+    generate_all_charts,
+    build_prompt,
+    generate_report_text,
+    scraped_reviews_to_report_df,
+    discover_sheets,
+    load_month_data,
+    generate_report_from_df,
+)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -617,3 +629,204 @@ else:
         """,
         unsafe_allow_html=True,
     )
+
+
+# ===========================================================================
+# 📊 AI REPORT GENERATION
+# ===========================================================================
+
+st.divider()
+st.markdown(
+    "<h2 style='margin-bottom: 0;'>📊 AI Report Generator</h2>",
+    unsafe_allow_html=True,
+)
+st.markdown(
+    "<p style='color: #6b7280; margin-top: 0.2rem; margin-bottom: 1rem;'>"
+    "Generate a comprehensive AI-powered qualitative analysis report using GPT-4o. "
+    "Use your <b>scraped reviews</b> or upload an <b>Excel file</b> with historical data.</p>",
+    unsafe_allow_html=True,
+)
+
+# ---- Report source selection ----
+report_data_source = st.radio(
+    "Data source for the report",
+    options=["scraped", "excel"],
+    format_func=lambda x: "📡 Use scraped reviews (from above)" if x == "scraped" else "📁 Upload Excel file",
+    horizontal=True,
+    key="report_data_source",
+)
+
+# ---- Excel upload flow ----
+_report_df: Optional[pd.DataFrame] = None
+_prev_df: Optional[pd.DataFrame] = None
+_month_label: str = ""
+_prev_month_label: Optional[str] = None
+
+if report_data_source == "excel":
+    uploaded_file = st.file_uploader(
+        "Upload Excel file",
+        type=["xlsx", "xls"],
+        help="Expected format: one sheet per month named '<Month> <YYYY> reviews' with columns: Platform, Rating, Topics, Content French, etc.",
+        key="report_excel_upload",
+    )
+    if uploaded_file is not None:
+        try:
+            import tempfile
+
+            # Save to temp file for pd.ExcelFile to read
+            with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+                tmp.write(uploaded_file.read())
+                tmp_path = tmp.name
+
+            month_map, month_order = discover_sheets(tmp_path)
+            if not month_order:
+                st.warning("⚠️ No valid month sheets found. Sheets should be named like 'January 2026 reviews'.")
+            else:
+                # Month selector
+                month_labels = {}
+                for key in month_order:
+                    y, m = key.split("-")
+                    month_labels[key] = f"{calendar.month_name[int(m)]} {y}"
+
+                selected_month = st.selectbox(
+                    "Select month",
+                    options=month_order,
+                    format_func=lambda k: month_labels[k],
+                    key="report_month_select",
+                )
+
+                if selected_month:
+                    sheet_name = month_map[selected_month]
+                    _report_df = load_month_data(tmp_path, sheet_name)
+                    y, m = selected_month.split("-")
+                    _month_label = f"{calendar.month_name[int(m)]} '{y[2:]}"
+
+                    # Previous month for comparison
+                    idx = month_order.index(selected_month)
+                    if idx > 0:
+                        prev_key = month_order[idx - 1]
+                        prev_sheet = month_map[prev_key]
+                        _prev_df = load_month_data(tmp_path, prev_sheet)
+                        py, pm = prev_key.split("-")
+                        _prev_month_label = f"{calendar.month_name[int(pm)]} {py}"
+
+                    st.success(
+                        f"✅ Loaded **{len(_report_df)} reviews** from sheet *{sheet_name}*"
+                        + (f" (comparing with {_prev_month_label}: {len(_prev_df)} reviews)" if _prev_df is not None else "")
+                    )
+        except Exception as e:
+            st.error(f"Error reading Excel file: {e}")
+
+elif report_data_source == "scraped":
+    if "reviews" in st.session_state and st.session_state["reviews"]:
+        reviews_list_for_report = st.session_state["reviews"]
+        reviews_df_for_report = reviews_to_dataframe(reviews_list_for_report)
+        _report_df = scraped_reviews_to_report_df(reviews_df_for_report)
+        _month_label = f"{calendar.month_name[end_date.month]} '{str(end_date.year)[2:]}"
+        st.info(f"📡 Using **{len(_report_df)} scraped reviews** from the current session.")
+    else:
+        st.info("💡 Fetch reviews first using the **🚀 Fetch Reviews** button above, then generate a report.")
+
+# ---- OpenAI API Key + Model selection ----
+st.markdown("---")
+report_col1, report_col2 = st.columns([3, 1])
+with report_col1:
+    openai_api_key = st.text_input(
+        "🔑 OpenAI API Key",
+        type="password",
+        placeholder="sk-...",
+        help="Required to generate the AI report. Get yours at https://platform.openai.com/api-keys",
+        key="openai_api_key",
+    )
+with report_col2:
+    model_choice = st.selectbox(
+        "Model",
+        ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
+        index=0,
+        key="report_model",
+    )
+
+# ---- Generate Report button ----
+can_generate = _report_df is not None and len(_report_df) > 0 and openai_api_key
+generate_clicked = st.button(
+    "🤖 Generate AI Report",
+    type="primary",
+    disabled=not can_generate,
+    help="Requires review data and an OpenAI API key" if not can_generate else None,
+)
+
+if generate_clicked and _report_df is not None and openai_api_key:
+    with st.spinner("🤖 Generating report… This may take 30-60 seconds."):
+        try:
+            report_md, metrics, charts = generate_report_from_df(
+                df=_report_df,
+                month_label=_month_label,
+                api_key=openai_api_key,
+                prev_df=_prev_df,
+                prev_month_label=_prev_month_label,
+                model=model_choice,
+            )
+            st.session_state["report_md"] = report_md
+            st.session_state["report_metrics"] = metrics
+            st.session_state["report_charts"] = charts
+            st.session_state["report_month_label"] = _month_label
+            st.toast("Report generated!", icon="✅")
+        except Exception as e:
+            st.error(f"❌ Report generation failed: {e}")
+
+# ---- Display generated report ----
+if "report_md" in st.session_state and st.session_state["report_md"]:
+    report_md = st.session_state["report_md"]
+    report_metrics = st.session_state.get("report_metrics", {})
+    report_charts = st.session_state.get("report_charts", {})
+    report_month = st.session_state.get("report_month_label", "")
+
+    st.divider()
+    st.subheader(f"📊 Report: {report_month}")
+
+    # ---- Display charts ----
+    if report_charts:
+        chart_cols = st.columns(min(len(report_charts), 2))
+        for i, (name, fig) in enumerate(report_charts.items()):
+            with chart_cols[i % 2]:
+                st.pyplot(fig, use_container_width=True)
+
+    st.divider()
+
+    # ---- Display Markdown report ----
+    st.markdown(report_md)
+
+    st.divider()
+
+    # ---- Download report ----
+    st.subheader("⬇️ Export Report")
+
+    report_bytes = report_md.encode("utf-8")
+    safe_month = report_month.replace(" ", "_").replace("'", "")
+
+    dl_col1, dl_col2 = st.columns(2)
+    with dl_col1:
+        st.download_button(
+            label="📄 Download Report (Markdown)",
+            data=report_bytes,
+            file_name=f"alan_report_{safe_month}.md",
+            mime="text/markdown",
+        )
+    with dl_col2:
+        # Also provide the raw metrics as JSON
+        import json
+        # Convert non-serializable items
+        metrics_json = {}
+        for k, v in report_metrics.items():
+            try:
+                json.dumps(v)
+                metrics_json[k] = v
+            except (TypeError, ValueError):
+                metrics_json[k] = str(v)
+        metrics_bytes = json.dumps(metrics_json, indent=2, ensure_ascii=False).encode("utf-8")
+        st.download_button(
+            label="📋 Download Metrics (JSON)",
+            data=metrics_bytes,
+            file_name=f"alan_metrics_{safe_month}.json",
+            mime="application/json",
+        )
