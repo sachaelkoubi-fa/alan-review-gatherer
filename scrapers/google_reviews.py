@@ -1,9 +1,11 @@
-"""Scraper for Google Reviews of Alan via Google Search.
+"""Scraper for Google Reviews of Alan.
 
-Uses the Google Search "reviews" panel URL which shows all Google reviews
-for a business in a scrollable list.  Much more reliable than the Google
-Maps approach because the page structure is simpler and does not require
-navigating through tabs.
+These are the same reviews visible on Google Maps at:
+  https://www.google.com/maps/place/Alan/@48.8754333,2.3632119
+
+Google Maps blocks review content for non-authenticated headless browsers
+("affichage limité"), so we scrape them via the Google Search reviews panel
+which shows the identical Google Business Profile reviews.
 
 Requires Playwright (with system Chrome when available).
 """
@@ -21,8 +23,18 @@ from .base import Review, filter_reviews_by_date
 
 logger = logging.getLogger(__name__)
 
-# Google Search reviews URL for Alan (obtained from the Google Knowledge
-# Panel "reviews" link).  The `si` parameter is the stable business ID.
+# Google Maps page for Alan (for reference — same reviews)
+GOOGLE_MAPS_URL = (
+    "https://www.google.com/maps/place/Alan/"
+    "@48.8754333,2.360637,2068m/"
+    "data=!3m1!1e3!4m8!3m7!1s0x47e66e14e850c89f:0x851109550d1a4c7"
+    "!8m2!3d48.8754333!4d2.3632119!9m1!1b1"
+    "!16s%2Fg%2F11csptw_ww?entry=ttu"
+)
+
+# Google Search reviews URL for Alan — this displays the Google Business
+# Profile reviews in a scrollable panel (same reviews as on Google Maps).
+# The `si` parameter is the stable business identifier.
 GOOGLE_REVIEWS_URL = (
     "https://www.google.com/search"
     "?q=Alan+Reviews"
@@ -180,16 +192,20 @@ _JS_EXTRACT_REVIEWS = r"""() => {
 # Main scraper
 # ---------------------------------------------------------------------------
 
-async def _scrape_google_search_reviews(
+async def _scrape_google_reviews(
     start_date: date,
     end_date: date,
     max_reviews: int = 500,
     progress_callback=None,
 ) -> List[Review]:
-    """Scrape Google reviews from Google Search results page."""
+    """Scrape Google reviews from the Google Search reviews panel.
+
+    These are the same reviews displayed on Google Maps for Alan.
+    """
     from playwright.async_api import async_playwright
 
     reviews: List[Review] = []
+    raw_count = 0
 
     async with async_playwright() as pw:
         # Try system Chrome first, fall back to bundled Chromium
@@ -226,9 +242,17 @@ async def _scrape_google_search_reviews(
             if progress_callback:
                 progress_callback("Google Reviews: loading page…")
 
-            logger.info("Google Reviews: navigating to %s", GOOGLE_REVIEWS_URL[:80])
+            logger.info("Google Reviews: navigating to Google Search reviews panel")
             await page.goto(GOOGLE_REVIEWS_URL, timeout=30000)
-            await page.wait_for_timeout(3000)
+            await page.wait_for_timeout(4000)
+
+            # Check for CAPTCHA / sorry page
+            if "sorry" in page.url:
+                logger.error("Google Reviews: blocked by CAPTCHA. Try again later.")
+                if progress_callback:
+                    progress_callback("Google Reviews: blocked by Google, retrying…")
+                await browser.close()
+                return []
 
             # Accept cookies
             try:
@@ -262,8 +286,8 @@ async def _scrape_google_search_reviews(
                 await page.evaluate("window.scrollBy(0, 2000)")
                 await page.wait_for_timeout(1500)
 
-                count = await page.locator("text=Avis de Google").count()
-                logger.info("Google Reviews: scroll %d → %d reviews visible", scroll_i + 1, count)
+                count = await page.locator("div.SEzcUb").count()
+                logger.info("Google Reviews: scroll %d → %d review cards visible", scroll_i + 1, count)
 
                 if count == prev_count:
                     no_change_rounds += 1
@@ -279,10 +303,11 @@ async def _scrape_google_search_reviews(
 
             # Extract all reviews from the DOM
             raw_reviews = await page.evaluate(_JS_EXTRACT_REVIEWS)
-            logger.info("Google Reviews: extracted %d raw reviews from DOM.", len(raw_reviews))
+            raw_count = len(raw_reviews)
+            logger.info("Google Reviews: extracted %d raw reviews from DOM.", raw_count)
 
             if progress_callback:
-                progress_callback(f"Google Reviews: {len(raw_reviews)} reviews extracted, filtering by date…")
+                progress_callback(f"Google Reviews: {raw_count} reviews extracted, filtering by date…")
 
             # Convert to Review objects with date parsing
             seen: set = set()
@@ -316,7 +341,7 @@ async def _scrape_google_search_reviews(
     filtered = filter_reviews_by_date(reviews, start_date, end_date)
     logger.info(
         "Google Reviews: %d raw → %d after dedup → %d after date filter.",
-        len(raw_reviews) if "raw_reviews" in dir() else 0,
+        raw_count,
         len(reviews),
         len(filtered),
     )
@@ -333,7 +358,11 @@ def scrape_google_reviews(
     max_reviews: int = 500,
     progress_callback=None,
 ) -> List[Review]:
-    """Synchronous entry point for the Google Reviews scraper."""
+    """Synchronous entry point for the Google Reviews scraper.
+
+    Scrapes Google Business Profile reviews for Alan — the same reviews
+    visible at: https://www.google.com/maps/place/Alan/
+    """
     import asyncio
 
     try:
@@ -344,7 +373,7 @@ def scrape_google_reviews(
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 return pool.submit(
                     asyncio.run,
-                    _scrape_google_search_reviews(
+                    _scrape_google_reviews(
                         start_date, end_date, max_reviews, progress_callback
                     ),
                 ).result()
@@ -352,7 +381,7 @@ def scrape_google_reviews(
         pass
 
     return asyncio.run(
-        _scrape_google_search_reviews(
+        _scrape_google_reviews(
             start_date, end_date, max_reviews, progress_callback
         )
     )
