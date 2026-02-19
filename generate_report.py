@@ -710,7 +710,7 @@ def generate_report_text(
 
     response = client.chat.completions.create(
         model=model,
-        max_tokens=16000,
+        max_completion_tokens=16000,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
