@@ -748,12 +748,7 @@ else:
         icon="🔑",
     )
 
-model_choice = st.selectbox(
-    "Model",
-    ["gpt-5.2", "gpt-5.2-pro", "gpt-5.1", "gpt-5", "gpt-4o", "o3", "o4-mini"],
-    index=0,
-    key="report_model",
-)
+model_choice = "gpt-5.2"
 
 # ---- Generate Report button ----
 can_generate = _report_df is not None and len(_report_df) > 0 and _key_configured
