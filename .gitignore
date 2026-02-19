@@ -24,5 +24,6 @@ Thumbs.db
 # Debug files
 debug_*.png
 
-# Streamlit secrets
+# Secrets
+.env
 .streamlit/secrets.toml

@@ -3,8 +3,8 @@ Alan Monthly Review Report Generator
 =====================================
 
 Reads qualitative review data from an Excel file or from scraped reviews,
-computes quantitative metrics, and uses OpenAI (GPT-4o) to generate a
-full narrative Markdown report with charts.
+computes quantitative metrics, and uses OpenAI to generate a
+comprehensive narrative Markdown report with charts.
 
 Can be used as:
   - A library imported by the Streamlit app
@@ -516,17 +516,27 @@ def build_prompt(
     reviews_block = _format_reviews_block(df)
 
     system_prompt = (
-        "You are an expert analyst at Alan (a health insurance company) who "
-        "writes monthly qualitative review analysis reports. You produce "
-        "insightful, actionable reports based on user reviews collected from "
-        "Google, Trustpilot, app stores, and Opinion Assurances.\n\n"
-        "Your reports are clear, structured, and data-driven. You cite specific "
-        "mention counts and include verbatim quotes (in French, from the "
-        "original reviews) to illustrate key points. You identify patterns, "
-        "risks, and opportunities."
+        "You are a senior Voice-of-the-Customer analyst at Alan, a European "
+        "health insurance company. You write extremely thorough, publication-ready "
+        "monthly qualitative review analysis reports that are read by the CEO, "
+        "VP Product, VP Customer Experience, and Head of Operations.\n\n"
+        "Your reports are:\n"
+        "- **Long and comprehensive** — every section should be deeply analysed "
+        "with multiple paragraphs, not bullet-point summaries.\n"
+        "- **Data-driven** — you cite precise mention counts, percentages, and "
+        "rating distributions to support every claim.\n"
+        "- **Rich in verbatim quotes** — you include many French quotes from the "
+        "original reviews to illustrate points, with at least 2-3 quotes per theme.\n"
+        "- **Analytical** — you identify root causes, correlations between themes, "
+        "and explain *why* trends exist, not just *what* they are.\n"
+        "- **Actionable** — every section ends with clear implications or "
+        "recommendations for the relevant team.\n"
+        "- **Contextual** — you compare with previous months when data is available "
+        "and highlight emerging vs recurring issues.\n\n"
+        "You write in English but all customer quotes remain in French."
     )
 
-    user_prompt = f"""Write a complete monthly qualitative review analysis report for **{month_label}** based on the data below.
+    user_prompt = f"""Write an extremely detailed and comprehensive monthly qualitative review analysis report for **{month_label}** based on the data below. The report should be VERY LONG and thorough — aim for at least 3000-4000 words. Every section must contain deep analysis with multiple paragraphs, verbatim French quotes, and actionable insights.
 
 {metrics_block}
 
@@ -537,68 +547,150 @@ def build_prompt(
 ---
 
 Generate the report in **Markdown** with EXACTLY the following sections.
-Use the quantitative data above and analyse the individual reviews to write each section.
+Use the quantitative data above and analyse EVERY individual review to write each section.
+Be exhaustive — do not skip or summarise when you can elaborate.
 
 # {month_label} - Alan Global Reviews ⭐
 
-## ℹ️💡 Context
+## ℹ️💡 Context & Methodology
 
-Write a brief context paragraph (mention that this is a qualitative analysis that adds colour to the quantitative numbers, note the sample size and any disclaimers about limited data).
+Write a detailed context section (2-3 paragraphs):
+- Explain that this is a qualitative analysis that complements quantitative dashboards.
+- State the exact sample size, date range, and platforms covered.
+- Note any methodological caveats (e.g. self-selection bias, platform skew).
+- If previous month data is available, briefly frame the month-over-month context.
+- Mention the types of reviewers (new members, long-term members, churned members) if discernible.
 
-## Key Metrics
+## 📊 Key Metrics
 
-Present the key metrics clearly using bold text and emojis:
-- 🔄 Total reviews
-- 💡 Avg rating (with delta vs previous month if available)
-- 🤩 Five-star reviews count
-- 💔 One-star reviews count
+Present all key metrics in a clear, visually structured way using bold text and emojis:
+- 🔄 Total reviews (with delta vs previous month if available)
+- ⭐ Average rating (with delta vs previous month and interpretation)
+- 🤩 Five-star reviews count and percentage of total
+- ⭐ Four-star reviews count and percentage
+- ⚠️ Two-star reviews count and percentage
+- 💔 One-star reviews count and percentage
+- 📊 Rating distribution analysis (is it bimodal? skewed? concentrated?)
+- 📱 Platform breakdown (which platforms drive the most volume and which skew positive/negative)
 
-## Executive Summary
+Write a 1-2 paragraph interpretation of what the numbers tell us — don't just list them.
 
-Write 3-4 sentences summarising the overall sentiment. Note the polarity, key positive drivers, and key risk areas. Mention platform-specific trends if relevant.
+## 🔍 Executive Summary
 
-## 🚨 Churn Risk
+Write a thorough executive summary (3-5 paragraphs):
+- Overall sentiment assessment with precise numbers.
+- The 2-3 most important positive signals and their business impact.
+- The 2-3 most critical risk areas requiring immediate attention.
+- Platform-specific trends and anomalies.
+- How this month compares to the previous month (if data available).
+- One-line recommendation for leadership.
 
-Identify reviews where members explicitly state they want to leave, cancel, or switch insurers. Provide the count and include 1-2 representative **French** quotes in blockquotes.
-If no such reviews exist, state that explicitly.
+## 🚨 Churn Risk Assessment
 
-## ⭐ What's Working
+Provide a deep churn risk analysis (2-4 paragraphs):
+- Identify ALL reviews where members explicitly mention wanting to leave, cancel, switch, or express strong dissatisfaction.
+- Categorise churn signals: explicit intent to leave, implicit frustration suggesting churn, competitive mentions.
+- Provide the exact count and include **at least 3-4** representative French quotes in blockquotes.
+- Analyse the root causes driving churn intent.
+- Estimate severity: how many are at immediate risk vs long-term risk?
+- If no churn signals exist, analyse why and what protective factors are visible.
+- End with specific retention recommendations.
 
-List the top 3-4 positive themes with:
-1. Theme name and mention count
-2. A brief explanation
-3. A representative **French** quote in a blockquote where impactful
+## ⭐ What's Working — Detailed Positive Theme Analysis
 
-## 💔 What's Not Working
+For EACH of the top 5-6 positive themes, provide:
+1. **Theme name** with exact mention count and percentage of positive reviews
+2. **Deep explanation** (full paragraph): what specifically do reviewers praise? What makes Alan stand out?
+3. **Multiple French quotes** (at least 2-3 per theme) in blockquotes showing the range of positive feedback
+4. **Platform distribution**: which platforms mention this theme most?
+5. **Business implication**: why does this matter and how can it be leveraged?
 
-List the top 3-4 negative themes with:
-1. Theme name and mention count
-2. A detailed explanation grouping related complaints
-3. Representative **French** quotes in blockquotes
+After listing all themes, write a **synthesis paragraph** connecting the positive themes and explaining what they reveal about Alan's core value proposition.
 
-## 💡 Product Signals
+## 💔 What's Not Working — Detailed Negative Theme Analysis
 
-List specific, actionable product feedback:
-- Technical fixes needed (bugs, errors)
-- Feature requests
-- UX improvement suggestions
-Group them by category with brief descriptions.
-If no clear signals exist, say so.
+For EACH of the top 5-6 negative themes, provide:
+1. **Theme name** with exact mention count and percentage of negative reviews
+2. **Root cause analysis** (full paragraph): what is the underlying problem? Is it a product issue, process issue, or communication issue?
+3. **Impact assessment**: how does this issue affect member satisfaction and retention?
+4. **Multiple French quotes** (at least 2-3 per theme) in blockquotes showing the range and severity of complaints
+5. **Platform distribution**: where is the complaint concentrated?
+6. **Specific recommendation**: what should the relevant team do to address this?
 
-## Reviews by Platform
+After listing all themes, write a **synthesis paragraph** connecting the negative themes and identifying systemic issues or patterns.
 
-Provide a breakdown of sentiment by platform. Note which platforms have more positive vs negative reviews and any platform-specific patterns.
+## 🔄 Sentiment Trends & Patterns
+
+Analyse cross-cutting patterns (2-3 paragraphs):
+- Are there correlations between themes (e.g. people who complain about X also mention Y)?
+- Are certain issues platform-specific or universal?
+- Are there demographic or usage patterns visible (new members vs long-term)?
+- How has the sentiment mix shifted compared to the previous month (if data available)?
+- Identify any emerging issues that appeared this month for the first time.
+
+## 💡 Product & Technical Signals
+
+Provide an exhaustive list of actionable product feedback, grouped by category:
+
+### 🐛 Bugs & Technical Issues
+- List each specific bug or technical problem mentioned, with French quotes.
+- Assess severity and frequency.
+
+### 🆕 Feature Requests
+- List each feature request, with French quotes.
+- Assess feasibility and potential impact.
+
+### 🎨 UX & Design Improvements
+- List UX friction points and improvement suggestions.
+- Include specific user journey pain points.
+
+### 📞 Customer Service & Operations
+- List operational issues (response time, process friction, claim handling).
+- Include specific French quotes about service interactions.
+
+If a category has no signals, state that explicitly.
+
+## 📱 Reviews by Platform — Detailed Breakdown
+
+For EACH platform (Google, Trustpilot, App Store, Play Store, Opinion Assurances, etc.):
+- Number of reviews and average rating.
+- Dominant sentiment (positive, negative, mixed).
+- Key themes specific to this platform.
+- 1-2 representative French quotes.
+- Why this platform may skew differently (audience, timing, review triggers).
+
+Write a **comparison paragraph** at the end highlighting the most striking cross-platform differences.
+
+## 🏆 Notable Reviews — Highlights & Lowlights
+
+Select 3-4 of the most impactful reviews (positive AND negative) and provide:
+- The full or near-full French quote in a blockquote.
+- Platform and rating.
+- Why this review matters (reputation risk, product insight, competitive signal).
+- Recommended action if applicable.
+
+## 📋 Recommendations & Action Items
+
+Provide a prioritised list of 5-8 concrete recommendations:
+1. **Immediate actions** (this week): urgent fixes or responses needed.
+2. **Short-term actions** (this month): improvements to plan and execute.
+3. **Strategic actions** (this quarter): larger initiatives informed by the data.
+
+Each recommendation should reference the specific data/theme that drives it.
 
 ---
 
-IMPORTANT GUIDELINES:
-- All quotes must be in FRENCH (from the original "Content French" field).
-- Use mention counts from the data — be precise.
-- Be analytical and insightful, not just descriptive.
-- Flag the most reputationally damaging reviews.
-- Keep the tone professional but direct.
-- If data is limited, acknowledge it rather than over-extrapolate.
-- Do NOT include any image references or chart placeholders — charts will be inserted automatically after generation."""
+CRITICAL GUIDELINES — FOLLOW ALL OF THESE:
+- This report must be **extremely detailed and long** — at least 3000-4000 words. Do NOT be brief.
+- All quotes MUST be in FRENCH (from the original "Content French" field). Include MANY quotes.
+- Use precise mention counts and percentages — be exact, not vague.
+- Be deeply analytical and insightful — explain WHY, not just WHAT.
+- Flag the most reputationally damaging reviews with urgency.
+- Keep the tone professional, strategic, and direct.
+- If data is limited, acknowledge it but still extract maximum insight.
+- Do NOT include any image references or chart placeholders — charts will be inserted automatically.
+- Write full paragraphs, not just bullet lists — this is a narrative report, not a dashboard.
+- Every section should feel like it was written by a senior analyst who deeply understands the business."""
 
     return system_prompt, user_prompt
 
@@ -618,7 +710,7 @@ def generate_report_text(
 
     response = client.chat.completions.create(
         model=model,
-        max_tokens=8000,
+        max_tokens=16000,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},

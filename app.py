@@ -14,6 +14,7 @@ from __future__ import annotations
 import calendar
 import io
 import logging
+import os
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -49,6 +50,7 @@ from scrapers.trustpilot_reviews import scrape_trustpilot
 from scrapers.opinion_assurances_reviews import scrape_opinion_assurances
 from scrapers.google_reviews import scrape_google_reviews
 from scrapers.appstore_reviews import scrape_app_store_reviews
+from dotenv import load_dotenv
 from generate_report import (
     compute_metrics,
     generate_all_charts,
@@ -59,6 +61,9 @@ from generate_report import (
     load_month_data,
     generate_report_from_df,
 )
+
+# Load .env file (for OPENAI_API_KEY, etc.)
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -642,8 +647,9 @@ st.markdown(
 )
 st.markdown(
     "<p style='color: #6b7280; margin-top: 0.2rem; margin-bottom: 1rem;'>"
-    "Generate a comprehensive AI-powered qualitative analysis report using GPT-4o. "
-    "Use your <b>scraped reviews</b> or upload an <b>Excel file</b> with historical data.</p>",
+    "Generate an in-depth AI-powered qualitative analysis report. "
+    "Use your <b>scraped reviews</b> or upload an <b>Excel file</b> with historical data. "
+    "API key is loaded securely from <code>.env</code>.</p>",
     unsafe_allow_html=True,
 )
 
@@ -727,32 +733,34 @@ elif report_data_source == "scraped":
     else:
         st.info("💡 Fetch reviews first using the **🚀 Fetch Reviews** button above, then generate a report.")
 
-# ---- OpenAI API Key + Model selection ----
+# ---- OpenAI API Key (loaded silently from .env — never exposed in UI) ----
 st.markdown("---")
-report_col1, report_col2 = st.columns([3, 1])
-with report_col1:
-    openai_api_key = st.text_input(
-        "🔑 OpenAI API Key",
-        type="password",
-        placeholder="sk-...",
-        help="Required to generate the AI report. Get yours at https://platform.openai.com/api-keys",
-        key="openai_api_key",
-    )
-with report_col2:
-    model_choice = st.selectbox(
-        "Model",
-        ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
-        index=0,
-        key="report_model",
+openai_api_key = os.environ.get("OPENAI_API_KEY", "")
+_key_configured = bool(openai_api_key)
+
+if _key_configured:
+    st.success("🔑 OpenAI API key loaded from environment.", icon="✅")
+else:
+    st.warning(
+        "⚠️ No OpenAI API key found. "
+        "Add `OPENAI_API_KEY=sk-...` to your `.env` file and restart the app.",
+        icon="🔑",
     )
 
+model_choice = st.selectbox(
+    "Model",
+    ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o3-mini"],
+    index=0,
+    key="report_model",
+)
+
 # ---- Generate Report button ----
-can_generate = _report_df is not None and len(_report_df) > 0 and openai_api_key
+can_generate = _report_df is not None and len(_report_df) > 0 and _key_configured
 generate_clicked = st.button(
     "🤖 Generate AI Report",
     type="primary",
     disabled=not can_generate,
-    help="Requires review data and an OpenAI API key" if not can_generate else None,
+    help="Requires review data and OPENAI_API_KEY in .env" if not can_generate else None,
 )
 
 if generate_clicked and _report_df is not None and openai_api_key:
