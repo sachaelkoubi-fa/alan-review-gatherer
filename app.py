@@ -798,7 +798,7 @@ if "report_md" in st.session_state and st.session_state["report_md"]:
         chart_cols = st.columns(min(len(report_charts), 2))
         for i, (name, fig) in enumerate(report_charts.items()):
             with chart_cols[i % 2]:
-                st.pyplot(fig, use_container_width=True)
+                st.pyplot(fig, width="stretch")
 
     st.divider()
 
