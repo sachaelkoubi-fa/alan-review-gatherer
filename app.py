@@ -749,7 +749,7 @@ else:
 
 model_choice = st.selectbox(
     "Model",
-    ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o3-mini"],
+    ["gpt-5.2-thinking", "gpt-5.2-instant", "gpt-4o", "gpt-4o-mini", "o3-mini"],
     index=0,
     key="report_model",
 )
