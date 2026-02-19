@@ -703,7 +703,7 @@ def generate_report_text(
     system_prompt: str,
     user_prompt: str,
     api_key: str,
-    model: str = "gpt-5.2-thinking",
+    model: str = "gpt-5.2",
 ) -> str:
     """Call OpenAI API to generate the Markdown report."""
     client = openai.OpenAI(api_key=api_key)
@@ -730,7 +730,7 @@ def generate_report_from_df(
     api_key: str,
     prev_df: Optional[pd.DataFrame] = None,
     prev_month_label: Optional[str] = None,
-    model: str = "gpt-5.2-thinking",
+    model: str = "gpt-5.2",
 ) -> tuple[str, dict, dict[str, plt.Figure]]:
     """Full pipeline: metrics + charts + AI report from a DataFrame.
 
