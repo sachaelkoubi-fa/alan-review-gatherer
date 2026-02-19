@@ -60,6 +60,7 @@ from generate_report import (
     discover_sheets,
     load_month_data,
     generate_report_from_df,
+    convert_md_to_pdf_bytes,
 )
 
 # Load .env file (for OPENAI_API_KEY, etc.)
@@ -812,18 +813,37 @@ if "report_md" in st.session_state and st.session_state["report_md"]:
     report_bytes = report_md.encode("utf-8")
     safe_month = report_month.replace(" ", "_").replace("'", "")
 
-    dl_col1, dl_col2 = st.columns(2)
+    # Generate PDF once and cache in session state
+    if "report_pdf_bytes" not in st.session_state or st.session_state.get("_pdf_source_md") != report_md:
+        with st.spinner("📄 Generating PDF…"):
+            try:
+                st.session_state["report_pdf_bytes"] = convert_md_to_pdf_bytes(report_md)
+                st.session_state["_pdf_source_md"] = report_md
+            except Exception as e:
+                st.session_state["report_pdf_bytes"] = None
+                st.warning(f"⚠️ PDF generation failed: {e}")
+
+    dl_col1, dl_col2, dl_col3 = st.columns(3)
     with dl_col1:
+        pdf_data = st.session_state.get("report_pdf_bytes")
+        if pdf_data:
+            st.download_button(
+                label="📕 Download Report (PDF)",
+                data=pdf_data,
+                file_name=f"alan_report_{safe_month}.pdf",
+                mime="application/pdf",
+            )
+        else:
+            st.button("📕 PDF unavailable", disabled=True)
+    with dl_col2:
         st.download_button(
             label="📄 Download Report (Markdown)",
             data=report_bytes,
             file_name=f"alan_report_{safe_month}.md",
             mime="text/markdown",
         )
-    with dl_col2:
-        # Also provide the raw metrics as JSON
+    with dl_col3:
         import json
-        # Convert non-serializable items
         metrics_json = {}
         for k, v in report_metrics.items():
             try:

@@ -756,6 +756,60 @@ def generate_report_from_df(
 
 
 # ---------------------------------------------------------------------------
+# PDF export (reusable)
+# ---------------------------------------------------------------------------
+
+_PDF_HTML_TEMPLATE = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 2cm 2.2cm; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 Helvetica, Arial, sans-serif;
+    color: #2D3436; font-size: 11pt; line-height: 1.6;
+  }
+  h1 { font-size: 22pt; color: #6C5CE7; border-bottom: 3px solid #6C5CE7;
+       padding-bottom: 6px; margin-top: 0; }
+  h2 { font-size: 15pt; color: #2D3436; margin-top: 28px;
+       border-bottom: 1px solid #DFE6E9; padding-bottom: 4px; }
+  h3 { font-size: 12pt; color: #636E72; }
+  blockquote { border-left: 4px solid #6C5CE7; margin: 10px 0;
+               padding: 6px 14px; background: #F8F9FA; color: #636E72;
+               font-style: italic; }
+  strong { color: #2D3436; }
+  ul, ol { padding-left: 22px; }
+  li { margin-bottom: 4px; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  th, td { border: 1px solid #DFE6E9; padding: 6px 10px; font-size: 10pt; }
+  th { background: #F8F9FA; font-weight: 600; }
+</style>
+</head>
+<body>
+{body}
+</body>
+</html>
+"""
+
+
+def convert_md_to_pdf_bytes(md_text: str) -> bytes:
+    """Convert Markdown text to a styled PDF and return as bytes.
+
+    This is designed for in-memory usage (e.g. Streamlit download button).
+    """
+    import markdown as md_lib
+    from weasyprint import HTML
+
+    html_body = md_lib.markdown(
+        md_text, extensions=["extra", "sane_lists", "tables"],
+    )
+    full_html = _PDF_HTML_TEMPLATE.format(body=html_body)
+    return HTML(string=full_html).write_pdf()
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
